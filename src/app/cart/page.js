@@ -1,10 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function CartPage() {
   const [cartItems, setCartItems] = useState([]);
   const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     const cart = JSON.parse(localStorage.getItem('cart') || '[]');
@@ -19,6 +22,33 @@ export default function CartPage() {
     localStorage.setItem('cart', JSON.stringify(newCart));
     setTotal(newCart.reduce((acc, item) => acc + item.price * item.quantity, 0));
     window.dispatchEvent(new Event('cart-updated'));
+  };
+
+  const handleCheckout = async () => {
+    if (cartItems.length === 0) return;
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: cartItems, total })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to checkout');
+      }
+
+      // Success! Clear cart and redirect
+      localStorage.removeItem('cart');
+      window.dispatchEvent(new Event('cart-updated'));
+      router.push(`/success?orderId=${data.orderId}`);
+    } catch (err) {
+      alert(err.message);
+      setLoading(false);
+    }
   };
 
   return (
@@ -41,7 +71,7 @@ export default function CartPage() {
               </div>
               <div className="flex items-center gap-6">
                 <span style={{ fontSize: '1.25rem', fontWeight: '700' }}>${(item.price * item.quantity).toFixed(2)}</span>
-                <button onClick={() => removeFromCart(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: '600' }}>Remove</button>
+                <button onClick={() => removeFromCart(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: '600' }} disabled={loading}>Remove</button>
               </div>
             </div>
           ))}
@@ -52,8 +82,8 @@ export default function CartPage() {
           </div>
           
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-            <button className="btn btn-accent" onClick={() => alert('Checkout functionality needs to be implemented with your backend/payment provider!')}>
-              Proceed to Checkout
+            <button className="btn btn-accent" onClick={handleCheckout} disabled={loading} style={{ opacity: loading ? 0.7 : 1 }}>
+              {loading ? 'Processing...' : 'Proceed to Checkout'}
             </button>
           </div>
         </div>
